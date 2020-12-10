@@ -3,21 +3,43 @@ import SwiftUI
 
 struct DetailState: Equatable {
     var time: Int = 0
+    var me: AvatarState = AvatarState()
+    var peer = AvatarState()
 }
 
 enum DetailAction: Equatable {
     case timerTicked
+    case me(AvatarAction)
+    case peer(AvatarAction)
 }
 
 struct TimerId: Hashable {}
 
-let detailReducer = Reducer<DetailState, DetailAction, Void> { state, action, _ in
-    switch action {
-    case .timerTicked:
-        state.time += 1
-        return .none
+let detailReducer = Reducer<DetailState, DetailAction, Void>.combine(
+    avatarReducer.pullback(
+        state: \.me,
+        action: /DetailAction.me,
+        environment: { _ in () }
+    ),
+    avatarReducer.pullback(
+        state: \.peer,
+        action: /DetailAction.peer,
+        environment: { _ in () }
+    ),
+    Reducer { state, action, _ in
+        switch action {
+        case .timerTicked:
+            state.time += 1
+            return .none
+            
+        case .me(_):
+            return .none
+            
+        case .peer(_):
+            return .none
+        }
     }
-}
+)
 .lifecycle(onAppear: {
     Effect.timer(id: TimerId(), every: 1, tolerance: .zero, on: DispatchQueue.main)
         .map { _ in DetailAction.timerTicked }
@@ -30,9 +52,31 @@ struct DetailView: View {
 
     var body: some View {
         WithViewStore(store) { viewStore in
-            VStack(spacing: 16) {
-                Text("Detail").font(.title)
-                Text("\(viewStore.time)")
+            VStack {
+                VStack {
+                    AvatarView(
+                        store: self.store.scope(
+                            state: \.me,
+                            action: { .action(DetailAction.me($0)) }
+                        )
+                    )
+                    Text("Me").font(.title)
+                }
+                
+                HStack {
+                    Image(systemName: "waveform")
+                    Text("Talking for \(viewStore.time) seconds")
+                }
+                
+                VStack {
+                    AvatarView(
+                        store: self.store.scope(
+                            state: \.me,
+                            action: { .action(DetailAction.me($0)) }
+                        )
+                    )
+                    Text("Peer").font(.title)
+                }
             }.onAppear {
                 viewStore.send(.onAppear)
             }.onDisappear {
