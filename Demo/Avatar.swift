@@ -19,7 +19,11 @@ enum AvatarError: Error, Equatable {
     case network
 }
 
-let avatarReducer = Reducer<AvatarState, AvatarAction, Void> { state, action, env in
+struct AvatarEnvironment {
+    var cancellationId: AnyHashable
+}
+
+let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { state, action, env in
     
     struct Cancellation: Hashable {}
     
@@ -31,6 +35,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, Void> { state, action, en
             .replaceError(with: AvatarAction.failed(.network))
             .delay(for: .seconds(1), scheduler: DispatchQueue.main)
             .eraseToEffect()
+            .cancellable(id: env.cancellationId)
         
     case .loaded(let image):
         state.image = image
@@ -44,7 +49,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, Void> { state, action, en
         return .init(value: .load)
         
     case .onDisappear:
-        return .cancel(id: Cancellation())
+        return .cancel(id: env.cancellationId)
     }
 }
 

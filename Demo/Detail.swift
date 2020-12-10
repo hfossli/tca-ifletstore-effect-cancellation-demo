@@ -15,16 +15,24 @@ enum DetailAction: Equatable {
 
 struct TimerId: Hashable {}
 
+
+
 let detailReducer = Reducer<DetailState, DetailAction, Void>.combine(
     avatarReducer.pullback(
         state: \.me,
         action: /DetailAction.me,
-        environment: { _ in () }
+        environment: { env in
+            struct Cancellation: Hashable {}
+            return AvatarEnvironment(cancellationId: Cancellation())
+        }
     ),
     avatarReducer.pullback(
         state: \.peer,
         action: /DetailAction.peer,
-        environment: { _ in () }
+        environment: { env in
+            struct Cancellation: Hashable {}
+            return AvatarEnvironment(cancellationId: Cancellation())
+        }
     ),
     Reducer { state, action, _ in
         switch action {
