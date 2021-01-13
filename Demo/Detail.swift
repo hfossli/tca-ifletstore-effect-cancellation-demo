@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import SwiftUI
+import Combine
 
 struct DetailState: Equatable {
     var time: Int = 0
@@ -11,30 +12,32 @@ enum DetailAction: Equatable {
     case timerTicked
     case me(AvatarAction)
     case peer(AvatarAction)
+    case onAppear
+    case onDisappear
 }
 
 struct TimerId: Hashable {}
 
 
 
-let detailReducer = Reducer<DetailState, DetailAction, Void>.combine(
+struct DetailEnvironment {
+    var bag = CancellationBag.autoId()
+    var me: AvatarEnvironment { .init(bag: .autoId(childOf: bag)) }
+    var peer: AvatarEnvironment { .init(bag: .autoId(childOf: bag)) }
+}
+
+let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combine(
     avatarReducer.pullback(
         state: \.me,
         action: /DetailAction.me,
-        environment: { env in
-            struct Cancellation: Hashable {}
-            return AvatarEnvironment(cancellationId: Cancellation())
-        }
+        environment: { $0.me }
     ),
     avatarReducer.pullback(
         state: \.peer,
         action: /DetailAction.peer,
-        environment: { env in
-            struct Cancellation: Hashable {}
-            return AvatarEnvironment(cancellationId: Cancellation())
-        }
+        environment: { $0.peer }
     ),
-    Reducer { state, action, _ in
+    Reducer { state, action, env in
         switch action {
         case .timerTicked:
             state.time += 1
@@ -45,27 +48,36 @@ let detailReducer = Reducer<DetailState, DetailAction, Void>.combine(
             
         case .peer(_):
             return .none
+            
+    case .onAppear:
+        return Publishers.Timer(
+            every: 1,
+            tolerance: .zero,
+            scheduler: DispatchQueue.main,
+            options: nil
+        )
+        .autoconnect()
+        .catchToEffect()
+        .cancellable(id: "timer", bag: env.bag)
+        .map { _ in DetailAction.timerTicked }
+            
+        case .onDisappear:
+            return .cancelAll(bag: env.bag)
         }
     }
 )
-.lifecycle(onAppear: {
-    Effect.timer(id: TimerId(), every: 1, tolerance: .zero, on: DispatchQueue.main)
-        .map { _ in DetailAction.timerTicked }
-}, onDisappear: {
-    .cancel(id: TimerId())
-})
 
 struct DetailView: View {
-    let store: Store<DetailState, LifecycleAction<DetailAction>>
+    var store: Store<DetailState, DetailAction>
 
     var body: some View {
         WithViewStore(store) { viewStore in
             VStack {
-                VStack {
+                HStack {
                     AvatarView(
                         store: self.store.scope(
                             state: \.me,
-                            action: { .action(DetailAction.me($0)) }
+                            action: { .me($0) }
                         )
                     )
                     Text("Me").font(.title)
@@ -76,18 +88,19 @@ struct DetailView: View {
                     Text("Talking for \(viewStore.time) seconds")
                 }
                 
-                VStack {
+                HStack {
                     AvatarView(
                         store: self.store.scope(
-                            state: \.me,
-                            action: { .action(DetailAction.me($0)) }
+                            state: \.peer,
+                            action: { .peer($0) }
                         )
                     )
                     Text("Peer").font(.title)
                 }
             }.onAppear {
                 viewStore.send(.onAppear)
-            }.onDisappear {
+            }
+            .onDisappear {
                 viewStore.send(.onDisappear)
             }
         }
