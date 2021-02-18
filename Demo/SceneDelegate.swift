@@ -13,10 +13,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
         window = UIWindow(windowScene: windowScene)
+        struct CancellationId: Hashable {}
         let view = AppView(store: Store(
             initialState: .init(),
             reducer: appReducer,
-            environment: ()
+            environment: AppEnvironment(cancellationId: CancellationId())
         ))
         window?.rootViewController = UIHostingController(rootView: view)
         window?.makeKeyAndVisible()

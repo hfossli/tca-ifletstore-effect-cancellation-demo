@@ -1,46 +1,119 @@
 import ComposableArchitecture
 import SwiftUI
+import Combine
 
 struct DetailState: Equatable {
     var time: Int = 0
+    var me: AvatarState = AvatarState()
+    var peer = AvatarState()
 }
 
-enum DetailAction {
-    case startTimer
-    case stopTimer
+enum DetailAction: Equatable {
     case timerTicked
+    case me(AvatarAction)
+    case peer(AvatarAction)
+    case onAppear
+    case onDisappear
 }
 
-let detailReducer = Reducer<DetailState, DetailAction, Void> { state, action, _ in
-    struct TimerId: Hashable {}
+struct TimerId: Hashable {}
 
-    switch action {
-    case .startTimer:
-        return Effect.timer(id: TimerId(), every: 1, tolerance: .zero, on: DispatchQueue.main)
+struct DetailEnvironment {
+    var cancellationId: AnyHashable
+}
+
+let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combine(
+    avatarReducer.pullback(
+        state: \.me,
+        action: /DetailAction.me,
+        environment: { env in
+            AvatarEnvironment(cancellationId: [env.cancellationId, "me"])
+        }
+    ),
+    avatarReducer.pullback(
+        state: \.peer,
+        action: /DetailAction.peer,
+        environment: { env in
+            AvatarEnvironment(cancellationId: [env.cancellationId, "peer"])
+        }
+    ),
+    Reducer { state, action, env in
+        
+        switch action {
+        case .timerTicked:
+            state.time += 1
+            return .none
+            
+        case .me(_):
+            return .none
+            
+        case .peer(_):
+            return .none
+            
+        case .onAppear:
+            return Publishers.Timer(
+                every: 1,
+                tolerance: .zero,
+                scheduler: DispatchQueue.main,
+                options: nil
+            )
+            .autoconnect()
+            .handleEvents(receiveSubscription: { (sub) in
+                print("receiveSubscription peer (\(env.cancellationId))")
+            }, receiveOutput: { (output) in
+                print("receiveOutput peer (\(env.cancellationId))")
+            }, receiveCompletion: { (completion) in
+                print("receiveCompletion peer (\(env.cancellationId))")
+            }, receiveCancel: {
+                print("receiveCancel peer (\(env.cancellationId))")
+            }, receiveRequest: { (demand) in
+                print("receiveRequest peer (\(env.cancellationId))")
+            })
+            .catchToEffect()
             .map { _ in DetailAction.timerTicked }
-
-    case .stopTimer:
-        return .cancel(id: TimerId())
-
-    case .timerTicked:
-        state.time += 1
-        return .none
+            .cancellable(id: env.cancellationId)
+            
+        case .onDisappear:
+            return .cancel(id: env.cancellationId)
+        }
     }
-
-}
+)
 
 struct DetailView: View {
-    let store: Store<DetailState, DetailAction>
+    var store: Store<DetailState, DetailAction>
 
     var body: some View {
         WithViewStore(store) { viewStore in
-            VStack(spacing: 16) {
-                Text("Detail").font(.title)
-                Text("\(viewStore.time)")
+            VStack {
+                HStack {
+                    AvatarView(
+                        store: self.store.scope(
+                            state: \.me,
+                            action: { .me($0) }
+                        )
+                    )
+                    Text("Me").font(.title)
+                }
+                
+                HStack {
+                    Image(systemName: "waveform")
+                    Text("Talking for \(viewStore.time) seconds")
+                }
+                
+                HStack {
+                    AvatarView(
+                        store: self.store.scope(
+                            state: \.peer,
+                            action: { .peer($0) }
+                        )
+                    )
+                    Text("Peer").font(.title)
+                }
             }.onAppear {
-                viewStore.send(.startTimer)
-            }.onDisappear {
-                viewStore.send(.stopTimer)
+                viewStore.send(.onAppear)
+            }
+            .onDisappear {
+                viewStore.send(.onDisappear)
             }
         }
     }
