@@ -25,7 +25,9 @@ struct AvatarEnvironment {
 
 let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { state, action, env in
     
-    struct Cancellation: Hashable {}
+    enum CancellationID: Hashable, CaseIterable {
+        case loadAvatar
+    }
     
     switch action {
     
@@ -46,7 +48,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { stat
                 print("receiveRequest avatar")
             })
             .eraseToEffect()
-            .cancellable(id: Cancellation(), bag: env.bag)
+            .cancellable(id: CancellationID.loadAvatar, bag: env.bag)
         
     case .loaded(let name):
         state.image = UIImage(systemName: name)
@@ -60,7 +62,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { stat
         return .init(value: .load)
         
     case .onDisappear:
-        return .cancelAll(bag: env.bag)
+        return .cancel(ids: CancellationID.allCases, bag: env.bag)
     }
 }
 

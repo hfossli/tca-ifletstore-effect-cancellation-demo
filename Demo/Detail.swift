@@ -38,6 +38,11 @@ let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combin
         environment: { $0.peer }
     ),
     Reducer { state, action, env in
+        
+        enum CancellationID: Hashable, CaseIterable {
+            case timer
+        }
+        
         switch action {
         case .timerTicked:
             state.time += 1
@@ -58,11 +63,11 @@ let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combin
         )
         .autoconnect()
         .catchToEffect()
-        .cancellable(id: "timer", bag: env.bag)
+        .cancellable(id: CancellationID.timer, bag: env.bag)
         .map { _ in DetailAction.timerTicked }
             
         case .onDisappear:
-            return .cancelAll(bag: env.bag)
+            return .cancel(ids: CancellationID.allCases, bag: env.bag)
         }
     }
 )

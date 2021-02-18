@@ -55,6 +55,14 @@ public final class CancellationBag {
     })
   }
   
+  public func cancel(ids: [AnyHashable]) {
+      bagsLock.sync({
+          for id in ids {
+              self.cancellationCancellables[id]?.forEach { $0.cancel() }
+          }
+      })
+  }
+  
   public func asChild(of parent: CancellationBag) -> CancellationBag {
     bagsLock.sync({
       guard !parent.children.contains(where: { $0.id == self.id }) else {
@@ -139,7 +147,7 @@ extension Effect {
     }
     .eraseToEffect()
     
-    return cancelInFlight ? .concatenate(.cancel(id: id), effect) : effect
+    return cancelInFlight ? .concatenate(.cancel(id: id, bag: bag), effect) : effect
   }
   
   /// An effect that will cancel any currently in-flight effect with the given identifier.
@@ -150,6 +158,12 @@ extension Effect {
   public static func cancel(id: AnyHashable, bag: CancellationBag = .global) -> Effect {
     return .fireAndForget {
       bag.cancel(id: id)
+    }
+  }
+  
+  public static func cancel(ids: [AnyHashable], bag: CancellationBag = .global) -> Effect {
+    return .fireAndForget {
+      bag.cancel(ids: ids)
     }
   }
   
