@@ -14,27 +14,10 @@ enum AppAction {
 }
 
 struct AppEnvironment {
-    var bag = CancellationBag.global
-    
-    var detail1: DetailEnvironment {
-        return DetailEnvironment(bag: .autoId(childOf: bag))
-    }
-    var detail2: DetailEnvironment {
-        return DetailEnvironment(bag: .autoId(childOf: bag))
-    }
+    let cancellationId: AnyHashable
 }
 
 let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
-    detailReducer.optional(cancellationBag: { $0.bag }).pullback(
-        state: \.detail1,
-        action: /AppAction.detail1,
-        environment: { $0.detail1 }
-    ),
-    detailReducer.optional(cancellationBag: { $0.bag }).pullback(
-        state: \.detail2,
-        action: /AppAction.detail2,
-        environment: { $0.detail2 }
-    ),
     Reducer { state, action, env in
         switch action {
         case .presentDetail1:
@@ -55,7 +38,23 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
         case .detail2(_):
             return .none
         }
-    }
+    }.presents(
+        detailReducer,
+        cancelEffectsOnDismiss: true,
+        state: \.detail1,
+        action: /AppAction.detail1,
+        environment: { env in
+            DetailEnvironment(cancellationId: [env.cancellationId, 1])
+        }
+    ).presents(
+        detailReducer,
+        cancelEffectsOnDismiss: true,
+        state: \.detail2,
+        action: /AppAction.detail2,
+        environment: { env in
+            DetailEnvironment(cancellationId: [env.cancellationId, 2])
+        }
+    )
 )
 
 struct AppView: View {

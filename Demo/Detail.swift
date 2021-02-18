@@ -18,26 +18,27 @@ enum DetailAction: Equatable {
 
 struct TimerId: Hashable {}
 
-
-
 struct DetailEnvironment {
-    var bag = CancellationBag.autoId()
-    var me: AvatarEnvironment { .init(bag: .autoId(childOf: bag)) }
-    var peer: AvatarEnvironment { .init(bag: .autoId(childOf: bag)) }
+    var cancellationId: AnyHashable
 }
 
 let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combine(
     avatarReducer.pullback(
         state: \.me,
         action: /DetailAction.me,
-        environment: { $0.me }
+        environment: { env in
+            AvatarEnvironment(cancellationId: [env.cancellationId, "me"])
+        }
     ),
     avatarReducer.pullback(
         state: \.peer,
         action: /DetailAction.peer,
-        environment: { $0.peer }
+        environment: { env in
+            AvatarEnvironment(cancellationId: [env.cancellationId, "peer"])
+        }
     ),
     Reducer { state, action, env in
+        
         switch action {
         case .timerTicked:
             state.time += 1
@@ -49,20 +50,31 @@ let detailReducer = Reducer<DetailState, DetailAction, DetailEnvironment>.combin
         case .peer(_):
             return .none
             
-    case .onAppear:
-        return Publishers.Timer(
-            every: 1,
-            tolerance: .zero,
-            scheduler: DispatchQueue.main,
-            options: nil
-        )
-        .autoconnect()
-        .catchToEffect()
-        .cancellable(id: "timer", bag: env.bag)
-        .map { _ in DetailAction.timerTicked }
+        case .onAppear:
+            return Publishers.Timer(
+                every: 1,
+                tolerance: .zero,
+                scheduler: DispatchQueue.main,
+                options: nil
+            )
+            .autoconnect()
+            .handleEvents(receiveSubscription: { (sub) in
+                print("receiveSubscription peer (\(env.cancellationId))")
+            }, receiveOutput: { (output) in
+                print("receiveOutput peer (\(env.cancellationId))")
+            }, receiveCompletion: { (completion) in
+                print("receiveCompletion peer (\(env.cancellationId))")
+            }, receiveCancel: {
+                print("receiveCancel peer (\(env.cancellationId))")
+            }, receiveRequest: { (demand) in
+                print("receiveRequest peer (\(env.cancellationId))")
+            })
+            .catchToEffect()
+            .map { _ in DetailAction.timerTicked }
+            .cancellable(id: env.cancellationId)
             
         case .onDisappear:
-            return .cancelAll(bag: env.bag)
+            return .cancel(id: env.cancellationId)
         }
     }
 )

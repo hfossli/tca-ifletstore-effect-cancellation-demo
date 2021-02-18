@@ -20,12 +20,10 @@ enum AvatarError: Error, Equatable {
 }
 
 struct AvatarEnvironment {
-    var bag = CancellationBag.autoId()
+    var cancellationId: AnyHashable
 }
 
 let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { state, action, env in
-    
-    struct Cancellation: Hashable {}
     
     switch action {
     
@@ -46,7 +44,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { stat
                 print("receiveRequest avatar")
             })
             .eraseToEffect()
-            .cancellable(id: Cancellation(), bag: env.bag)
+            .cancellable(id: env.cancellationId)
         
     case .loaded(let name):
         state.image = UIImage(systemName: name)
@@ -60,7 +58,7 @@ let avatarReducer = Reducer<AvatarState, AvatarAction, AvatarEnvironment> { stat
         return .init(value: .load)
         
     case .onDisappear:
-        return .cancelAll(bag: env.bag)
+        return .cancel(id: env.cancellationId)
     }
 }
 
