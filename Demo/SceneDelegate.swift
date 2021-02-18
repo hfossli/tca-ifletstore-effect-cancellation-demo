@@ -16,7 +16,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let view = AppView(store: Store(
             initialState: .init(),
             reducer: appReducer,
-            environment: ()
+            environment: AppEnvironment()
         ))
         window?.rootViewController = UIHostingController(rootView: view)
         window?.makeKeyAndVisible()
